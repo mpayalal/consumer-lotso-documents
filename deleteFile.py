@@ -20,20 +20,14 @@ async def delete_file(file_name: str):
         
         bucket_name = os.getenv("GCP_BUCKET_NAME")
         gcs = storage.Client.from_service_account_json(creds_path)
-        
-        if bucket_name in gcs.list_buckets(): 
-            logger.info("Bucket encontrado")
-            bucket = gcs.get_bucket(bucket_name)
-            file_to_delete = bucket.get_blob(file_name)
-
-            if file_to_delete:
-                file_to_delete.delete()
-                logger.info(f"Archivo eliminado: {file_name}")
-
-            else: 
-                logger.warning(f"Archivo no encontrado: {file_name}")
-        
-        logger.info("Bucket NO encontrado")
+    
+        bucket = gcs.get_bucket(bucket_name)
+        file_to_delete = bucket.get_blob(file_name)
+        if file_to_delete:
+            file_to_delete.delete()
+            logger.info(f"Archivo eliminado: {file_name}")
+        else: 
+            logger.warning(f"Archivo no encontrado: {file_name}")
 
     except Exception as e:
         logger.error(f"Error al eliminar archivo: {e}")
