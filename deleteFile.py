@@ -16,30 +16,32 @@ logger = logging.getLogger(__name__)
 async def delete_file(file_name: str):
     try:
         creds_path = os.getenv("GCP_SA_KEY")
+        logger.info(f"Creds path encontradas: {creds_path}")
+        
         bucket_name = os.getenv("GCP_BUCKET_NAME")
-
         gcs = storage.Client.from_service_account_json(creds_path)
         
         if bucket_name in gcs.list_buckets(): 
+            logger.info("Bucket encontrado")
             bucket = gcs.get_bucket(bucket_name)
             file_to_delete = bucket.get_blob(file_name)
 
             if file_to_delete:
                 file_to_delete.delete()
                 logger.info(f"Archivo eliminado: {file_name}")
-                print(f"Archivo eliminado: {file_name}")
+
             else: 
                 logger.warning(f"Archivo no encontrado: {file_name}")
-                print(f"Archivo no encontrado: {file_name}")
+        
+        logger.info("Bucket NO encontrado")
+
     except Exception as e:
         logger.error(f"Error al eliminar archivo: {e}")
-        print(f"Error al eliminar archivo: {e}")
     
 async def handle_message(message: IncomingMessage):
     async with message.process():  # Ack automático
         file_name = message.body.decode()
         logger.info(f"Mensaje recibido: {file_name}")
-        print(f"Mensaje recibido: {file_name}")
         await delete_file(file_name)
 
 async def main():
