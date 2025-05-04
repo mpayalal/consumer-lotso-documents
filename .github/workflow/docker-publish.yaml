@@ -1,0 +1,101 @@
+name: Build and Deploy to GKE
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: ${{ secrets.GKE_PROJECT }}
+  GKE_CLUSTER: marcianos-cluster   # cluster name
+  GKE_ZONE: us-central1-a  # cluster zone
+  IMAGE_NAME: lotso-delete
+  DEPLOYMENT_NAME: lotso-delete # deployment name
+  NAMESPACE: documents
+
+jobs:
+  generate-version:
+    runs-on: ubuntu-22.04
+    permissions:
+        contents: write
+    outputs:
+        new_tag: ${{ steps.bump-version.outputs.new_tag }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+            fetch-depth: '0'
+      - name: Bump version and push tag
+        id: bump-version
+        uses: anothrNick/github-tag-action@1.64.0
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            WITH_V: false
+            MAJOR_STRING_TOKEN: "release("
+            MINOR_STRING_TOKEN: "feat("
+            PATCH_STRING_TOKEN: "fix("
+            DEFAULT_BUMP: minor
+  setup-build-publish-deploy:
+    needs: generate-version
+    name: Setup, Build, Publish, and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    # Setup gcloud CLI
+    - id: 'auth'
+      uses: 'google-github-actions/auth@v0'
+      with:
+        credentials_json: '${{ secrets.GKE_SA_KEY }}'
+
+    # Get the GKE credentials so we can deploy to the cluster
+    - name: Set up GKE credentials
+      uses: google-github-actions/get-gke-credentials@v0
+      with:
+        cluster_name: ${{ env.GKE_CLUSTER }}
+        location: ${{ env.GKE_ZONE }}
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v1
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_TOKEN  }}
+
+    - name: Build ${{ env.IMAGE_NAME }} and publish to Docker Hub
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: mpayalal/${{ env.IMAGE_NAME }}:latest, mpayalal/${{ env.IMAGE_NAME }}:${{ needs.generate-version.outputs.new_tag }}
+
+    # Create namespace if it does not exist
+    - name: Create namespace if not exists
+      run: |
+        kubectl get namespace ${{ env.NAMESPACE }} || kubectl create namespace ${{ env.NAMESPACE }}
+
+    # Crear el secreto en el namespace 'documents' desde el namespace 'rabbitmq-ns'
+    - name: Copy RabbitMQ secret from rabbitmq-ns to documents
+      run: |
+        kubectl delete secret my-rabbitmq -n documents --ignore-not-found
+        kubectl get secret my-rabbitmq -n rabbitmq-ns -o yaml | \
+          sed 's/namespace: rabbitmq-ns/namespace: documents/' | \
+          kubectl apply -f -
+
+    # Service
+    - name: Apply Kubernetes Service
+      run: |
+        kubectl apply -f k8s/service.yaml -n ${{ env.NAMESPACE }}
+
+    # Deploy the Docker image to the GKE cluster
+    - name: Deploy
+      run: |-
+        kubectl apply -f k8s/deployment.yaml -n ${{ env.NAMESPACE }}
+        kubectl set image deployment/${{ env.DEPLOYMENT_NAME }} ${{ env.DEPLOYMENT_NAME }}=mpayalal/${{ env.IMAGE_NAME }}:${{ needs.generate-version.outputs.new_tag }} -n ${{ env.NAMESPACE }}
+        kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }} -n ${{ env.NAMESPACE }}
+
+    - name: Check deployment success
+      run: |
+        while [[ $(kubectl get deployment/${{ env.DEPLOYMENT_NAME }} -n ${{ env.NAMESPACE }} -o 'jsonpath={..status.conditions[?(@.type=="Available")].status}') != "True" ]]; do sleep 5; done
+        while [[ $(kubectl get pods -l app=${{ env.DEPLOYMENT_NAME }} -n ${{ env.NAMESPACE }} -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]]; do sleep 5; done

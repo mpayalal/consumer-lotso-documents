@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: lotso-delete-svc
+  namespace: documents
+spec:
+  selector:
+    app: lotso-delete
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
