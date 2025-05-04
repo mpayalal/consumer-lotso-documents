@@ -40,6 +40,8 @@ spec:
             value: my-rabbitmq.rabbitmq-ns.svc.cluster.local
           - name: RABBITMQ_PORT
             value: "5672"
+          - name: RABBITMQ_QUEUE_DELETE
+            value: delete_file
           resources:
             limits:
               cpu: "50m"

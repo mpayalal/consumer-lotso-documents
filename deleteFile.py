@@ -41,6 +41,7 @@ async def main():
             login=rabbitmq_user,
             password=rabbitmq_pass
         )
+        print("Conectado a Rabbit")
 
         channel = await connection.channel()
         await channel.set_qos(prefetch_count=1)
