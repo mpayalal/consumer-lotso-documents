@@ -68,6 +68,7 @@ async def handle_message(message: IncomingMessage):
             logger.error(f"Mensaje no es JSON válido: {message.body.decode()}")
 
 async def main():
+    global publisher_channel  
     try:
         connection = await connect_robust(
             host=rabbitmq_host,
