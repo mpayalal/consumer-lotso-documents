@@ -15,8 +15,6 @@ rabbitmq_queue_notifications = os.getenv("RABBITMQ_QUEUE_NOTIFICATIONS")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-publisher_channel = None
-
 async def delete_file(file_name: str, client_email: str):
     try:
         creds_path = os.getenv("GCP_SA_KEY")        
@@ -36,8 +34,6 @@ async def delete_file(file_name: str, client_email: str):
         logger.error(f"Error al eliminar archivo: {e}")
     
 async def send_notification(file_name: str, client_email: str):
-    global publisher_channel
-
     try:
         message = {
             "action": "deletedFile",
@@ -45,11 +41,16 @@ async def send_notification(file_name: str, client_email: str):
             "file_name": file_name
         }
 
-        body = json.dumps(message).encode()
-        await publisher_channel.default_exchange.publish(
-            Message(body),
-            routing_key=rabbitmq_queue_notifications
+        connection = await connect_robust(
+            host=rabbitmq_host,
+            login=rabbitmq_user,
+            password=rabbitmq_pass
         )
+        async with connection:
+            channel = await connection.channel()
+            queue = await channel.declare_queue(rabbitmq_queue_notifications, durable=True)
+            message =  Message(body=json.dumps(message).encode())
+            await channel.default_exchange.publish(message, routing_key=queue.name)
 
         logger.info(f"Mensaje enviado a {rabbitmq_queue_notifications}: {message}")
     except Exception as e:
@@ -68,7 +69,6 @@ async def handle_message(message: IncomingMessage):
             logger.error(f"Mensaje no es JSON válido: {message.body.decode()}")
 
 async def main():
-    global publisher_channel  
     try:
         connection = await connect_robust(
             host=rabbitmq_host,
