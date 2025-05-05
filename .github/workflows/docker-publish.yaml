@@ -9,8 +9,8 @@ env:
   PROJECT_ID: ${{ secrets.GKE_PROJECT }}
   GKE_CLUSTER: marcianos-cluster   # cluster name
   GKE_ZONE: us-central1-a  # cluster zone
-  IMAGE_NAME: lotso-delete
-  DEPLOYMENT_NAME: lotso-delete # deployment name
+  IMAGE_NAME: consumer-lotso-docs
+  DEPLOYMENT_NAME: consumer-lotso-docs # deployment name
   NAMESPACE: documents
 
 jobs:

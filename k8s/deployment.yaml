@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: lotso-delete
+  name: consumer-lotso-docs
   labels:
-    app: lotso-delete
+    app: consumer-lotso-docs
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: lotso-delete
+      app: consumer-lotso-docs
   template:
     metadata:
       labels:
-        app: lotso-delete
+        app: consumer-lotso-docs
     spec:
       containers:
-        - name: lotso-delete
-          image: mpayalal/lotso-delete:latest
+        - name: consumer-lotso-docs
+          image: mpayalal/consumer-lotso-docs:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -42,6 +42,8 @@ spec:
             value: "5672"
           - name: RABBITMQ_QUEUE_DELETE
             value: delete_file
+          - name: RABBITMQ_QUEUE_NOTIFICATIONS
+            value: notifications
           resources:
             limits:
               cpu: "50m"

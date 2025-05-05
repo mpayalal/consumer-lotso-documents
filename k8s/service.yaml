@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: lotso-delete-svc
+  name: consumer-lotso-docs-svc
   namespace: documents
 spec:
   selector:
-    app: lotso-delete
+    app: consumer-lotso-docs
   ports:
   - port: 8080
     targetPort: 8080
