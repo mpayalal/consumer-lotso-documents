@@ -145,8 +145,8 @@ async def main():
         await queue_delete.consume(handle_message)
 
         # Escuchar cola de autenticacion 
-        queue_auth = await channel.declare_queue("authenticate", durable=True)
-        logger.info(f"Esperando mensajes en la cola: {rabbitmq_queue_delete}")
+        queue_auth = await channel.declare_queue(rabbitmq_queue_auth, durable=True)
+        logger.info(f"Esperando mensajes en la cola: {rabbitmq_queue_auth}")
         await queue_auth.consume(handle_authenticate_message)
 
         # Mantener vivo el consumidor
