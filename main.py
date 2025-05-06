@@ -28,17 +28,17 @@ async def delete_file(file_name: str, client_email: str):
         if file_to_delete:
             file_to_delete.delete()
             logger.info(f"Archivo eliminado: {file_name}")
-            await send_notification(file_name, client_email)
+            await send_notification("deletedFile", file_name, client_email)
         else: 
             logger.warning(f"Archivo no encontrado: {file_name}")
 
     except Exception as e:
         logger.error(f"Error al eliminar archivo: {e}")
     
-async def send_notification(file_name: str, client_email: str):
+async def send_notification(action: str, file_name: str, client_email: str):
     try:
         message = {
-            "action": "deletedFile",
+            "action": action,
             "to_email": client_email,
             "file_name": file_name
         }
@@ -58,7 +58,7 @@ async def send_notification(file_name: str, client_email: str):
     except Exception as e:
         logger.error(f"Error al enviar notificacion: {e}")
 
-async def update_metadata(client_id: str, file_name: str):
+async def update_metadata(client_id: str, file_name: str, client_email: str):
     try:
         creds_path = os.getenv("GCP_SA_KEY")        
         bucket_name = os.getenv("GCP_BUCKET_NAME")
@@ -73,7 +73,7 @@ async def update_metadata(client_id: str, file_name: str):
             metadata["firmado"] = "true"
             file_to_update.metadata = metadata
             file_to_update.patch()
-
+            await send_notification("fileAuthenticated", file_name, client_email)
             logger.info(f"Archivo firmado exitosamente")
             
         else: 
@@ -99,6 +99,7 @@ async def handle_authenticate_message(message: IncomingMessage):
         try:
             payload = json.loads(message.body.decode())
             client_id = payload.get("client_id")
+            client_email = payload.get("client_email")
             url_document = payload.get("url_document")
             file_name = payload.get("file_name")
             logger.info(f"Mensaje recibido autenticacion")
@@ -118,7 +119,7 @@ async def handle_authenticate_message(message: IncomingMessage):
 
                     if status == 200 or status == 201:
                         logger.info(f"Documento autenticado exitosamente: {file_name}")
-                        await update_metadata(client_id, file_name)
+                        await update_metadata(client_id, file_name, client_email)
                     elif status == 204:
                         logger.warning(f"Documento no encontrado para {file_name}")
                     else:
