@@ -69,7 +69,7 @@ async def update_metadata(client_id: str, file_name: str):
         file_to_update = bucket.get_blob(file_path)
 
         if file_to_update:
-            metadata = file_to_update.meatdata
+            metadata = file_to_update.metadata
             metadata["firmado"] = "true"
             file_to_update.metadata = metadata
             file_to_update.patch()
