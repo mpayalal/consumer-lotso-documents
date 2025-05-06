@@ -44,6 +44,8 @@ spec:
             value: delete_file
           - name: RABBITMQ_QUEUE_NOTIFICATIONS
             value: notifications
+          - name: RABBITMQ_QUEUE_AUTHENTICATION
+            value: authenticate_file
           resources:
             limits:
               cpu: "50m"

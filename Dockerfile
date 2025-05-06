@@ -17,4 +17,4 @@ COPY . .
 EXPOSE 8080
 
 # Run the consumer
-CMD ["python", "deleteFile.py"]
+CMD ["python", "main.py"]
