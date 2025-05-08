@@ -13,6 +13,8 @@ rabbitmq_port = os.getenv("RABBITMQ_PORT")
 rabbitmq_queue_delete = os.getenv("RABBITMQ_QUEUE_DELETE")
 rabbitmq_queue_auth = os.getenv("RABBITMQ_QUEUE_AUTHENTICATION")
 rabbitmq_queue_notifications = os.getenv("RABBITMQ_QUEUE_NOTIFICATIONS")
+rabbitmq_queue_transfer_delete_docs = os.getenv("RABBITMQ_QUEUE_TRANSFER_DELETE_DOCS")
+rabbitmq_queue_transfer_delete_user = os.getenv("RABBITMQ_QUEUE_TRANSFER_DELETE_USER")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -82,6 +84,57 @@ async def update_metadata(client_id: str, file_name: str, client_email: str):
     except Exception as e:
         logger.error(f"Error al actualizar autenticacion: {e}")
 
+async def send_delete_user(id: int, req_status: int):
+    try:
+        message = {
+            "id": id,
+            "req_status": req_status
+        }
+
+        connection = await connect_robust(
+            host=rabbitmq_host,
+            login=rabbitmq_user,
+            password=rabbitmq_pass
+        )
+        async with connection:
+            channel = await connection.channel()
+            queue = await channel.declare_queue(rabbitmq_queue_transfer_delete_user, durable=True)
+            message =  Message(body=json.dumps(message).encode())
+            await channel.default_exchange.publish(message, routing_key=queue.name)
+
+        logger.info(f"Mensaje enviado a {rabbitmq_queue_transfer_delete_user}: {message}")
+
+    except Exception as e:
+        logger.error(f"Error al enviar mensaje: {e}")
+
+async def transfer_delete_docs(id: int, req_status: int):
+    try:
+        if req_status == 1:
+            creds_path = os.getenv("GCP_SA_KEY")        
+            bucket_name = os.getenv("GCP_BUCKET_NAME")
+            gcs = storage.Client.from_service_account_json(creds_path)
+        
+            prefix_folder = f"{id}/"
+            folder = list(gcs.list_blobs(bucket_name, prefix_folder))
+            for file in folder:
+                file.delete()
+
+            # Eliminar posible "objeto-carpeta"
+            bucket = gcs.get_bucket(bucket_name)
+            placeholder_blob = bucket.blob(f"{id}/")
+            if placeholder_blob.exists():
+                placeholder_blob.delete()
+
+            # Eliminar de base de datos
+            
+            # Mandar a la cola de usuarios
+            await send_delete_user(id, req_status)
+
+        else: 
+            return send_notification("transfer_error", client_email)
+    except Exception as e:
+        logger.error(f"Error al eliminar archivos: {e}")
+
 async def handle_message(message: IncomingMessage):
     async with message.process():  # Ack automático
         try:
@@ -128,6 +181,18 @@ async def handle_authenticate_message(message: IncomingMessage):
         except json.JSONDecodeError:
             logger.error(f"Mensaje no es JSON válido: {message.body.decode()}")
 
+async def handle_message_transfer_delete(message: IncomingMessage):
+    async with message.process():  # Ack automático
+        try:
+            payload = json.loads(message.body.decode())
+            id = payload.get("id")
+            req_status = payload.get("req_status")
+            logger.info(f"Usuario {id} - estado de transferencia {req_status}")
+
+            await transfer_delete_docs(id, req_status)
+        except json.JSONDecodeError:
+            logger.error(f"Mensaje no es JSON válido: {message.body.decode()}")
+
 async def main():
     try:
         connection = await connect_robust(
@@ -149,6 +214,11 @@ async def main():
         queue_auth = await channel.declare_queue(rabbitmq_queue_auth, durable=True)
         logger.info(f"Esperando mensajes en la cola: {rabbitmq_queue_auth}")
         await queue_auth.consume(handle_authenticate_message)
+
+        # Escuchar cola de eliminar todos los archivos de transferencia
+        queue_transfer_delete = await channel.declare_queue(rabbitmq_queue_transfer_delete_docs, durable=True)
+        logger.info(f"Esperando mensajes en la cola: {rabbitmq_queue_transfer_delete_docs}")
+        await queue_transfer_delete.consume(handle_message_transfer_delete)
 
         # Mantener vivo el consumidor
         await asyncio.Future()

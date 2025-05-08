@@ -46,6 +46,10 @@ spec:
             value: notifications
           - name: RABBITMQ_QUEUE_AUTHENTICATION
             value: authenticate_file
+          - name: RABBITMQ_QUEUE_TRANSFER_DELETE_DOCS
+            value: delete_data_transferred_documents_queue
+          - name: RABBITMQ_QUEUE_TRANSFER_DELETE_USER
+            value: delete_data_transferred_user_queue
           resources:
             limits:
               cpu: "50m"
