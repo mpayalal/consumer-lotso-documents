@@ -147,6 +147,7 @@ async def transfer_delete_docs(id: str, req_status: int):
                 logger.info(prefix_folder)
                 folder = list(gcs.list_blobs(bucket_name, prefix_folder))
                 for file in folder:
+                    logger.info(f"Archivo: {file.name}")
                     docs.append(file.name)
                     file.delete()
                 
