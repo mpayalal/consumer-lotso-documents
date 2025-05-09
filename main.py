@@ -192,7 +192,7 @@ async def transfer_receive_docs(message: IncomingMessage):
                                 
                                 with Session(engine) as session:
                                     logger.info("Tomar usuario desde BD")
-                                    statement = select(User).where(User.documentNumber == citizen_id)
+                                    statement = select(User).where(User.documentNumber == str(citizen_id))
                                     user = session.exec(statement).first()
                                     if not user:
                                         logger.error(f"Usuario no encontrado: {citizen_id}")
