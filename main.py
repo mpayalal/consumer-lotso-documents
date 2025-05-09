@@ -24,7 +24,6 @@ rabbitmq_queue_transfer_receive_docs = os.getenv("RABBITMQ_QUEUE_TRANSFER_RECEIV
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
 # Delete file from bucket in GCP
 async def delete_file_gcp(file_name: str):
     try:
@@ -94,6 +93,7 @@ async def update_metadata_gcp(file_path: str):
     except Exception as e:
         logger.error(f"Error al actualizar autenticacion: {e}")
 
+# Send message to delete user from DB
 async def send_delete_user(id: int, req_status: int):
     try:
         message = {
@@ -117,31 +117,57 @@ async def send_delete_user(id: int, req_status: int):
     except Exception as e:
         logger.error(f"Error al enviar mensaje: {e}")
 
+# Delete files of transfered user from GCP and DB
 async def transfer_delete_docs(id: int, req_status: int):
     try:
-        if req_status == 1:
-            creds_path = os.getenv("GCP_SA_KEY")        
-            bucket_name = os.getenv("GCP_BUCKET_NAME")
-            gcs = storage.Client.from_service_account_json(creds_path)
+        # Nos conectamos a BD
+        from models.File import File as FileModel
+        from models.User import User
+        from sqlmodel import Session
+        from sqlmodel import select
         
-            prefix_folder = f"{id}/"
-            folder = list(gcs.list_blobs(bucket_name, prefix_folder))
-            for file in folder:
-                file.delete()
+        with Session(engine) as session:
+            logger.info("Tomar usuario desde BD")
+            statement = select(User).where(User.id == str(id))
+            user = session.exec(statement).first()
+            if not user:
+                logger.error(f"Usuario no encontrado: {id}")
+                return 
+            user_email = user.email
 
-            # Eliminar posible "objeto-carpeta"
-            bucket = gcs.get_bucket(bucket_name)
-            placeholder_blob = bucket.blob(f"{id}/")
-            if placeholder_blob.exists():
-                placeholder_blob.delete()
-
-            # Eliminar de base de datos
+            if req_status == 1:
+                creds_path = os.getenv("GCP_SA_KEY")        
+                bucket_name = os.getenv("GCP_BUCKET_NAME")
+                gcs = storage.Client.from_service_account_json(creds_path)
             
-            # Mandar a la cola de usuarios
-            await send_delete_user(id, req_status)
+                docs = []
+                prefix_folder = f"{id}/"
+                folder = list(gcs.list_blobs(bucket_name, prefix_folder))
+                for file in folder:
+                    docs.append(file.name)
+                    file.delete()
 
-        else: 
-            return send_notification("transfer_error", client_email)
+                # Eliminar posible "objeto-carpeta"
+                bucket = gcs.get_bucket(bucket_name)
+                placeholder_blob = bucket.blob(f"{id}/")
+                if placeholder_blob.exists():
+                    placeholder_blob.delete()
+
+                logger.info("Se elimino exitosamente la carpeta del bucket")
+
+                # Eliminar archivos de BD
+                for file_path in docs:
+                    if FileModel.delete_by_path(session, file_path):
+                        logger.info(f"Archivo {file_path} eliminado exitosamente")
+                    else:
+                        logger.error(f"El archivo {file_path} no se pudo eliminar de BD")
+                        return send_notification("transfer_error", user_email)
+
+                # Mandar a la cola de usuarios para eliminarlo
+                await send_delete_user(id, req_status)
+
+            else: 
+                return send_notification("transfer_error", user_email)
     except Exception as e:
         logger.error(f"Error al eliminar archivos: {e}")
 
@@ -345,6 +371,7 @@ async def update_metadata(message: IncomingMessage):
         except json.JSONDecodeError:
             logger.error(f"Mensaje no es JSON válido: {message.body.decode()}")
 
+# Delete files of transfered user
 async def handle_message_transfer_delete(message: IncomingMessage):
     async with message.process():  # Ack automático
         try:
