@@ -47,3 +47,19 @@ class File(SQLModel, table=True):
             session.commit()
             return True
         return False
+    
+    @classmethod
+    def update_authenticated(cls, session: Session, file_path: str) -> bool:
+        """Marca el archivo como autenticado. Devuelve True si se actualizó, False si no se encontró."""
+        statement = select(cls).where(cls.file_path == file_path)
+        file = session.exec(statement).first()
+
+        if file:
+            file.authenticated = True
+            session.add(file)
+            session.commit()
+            session.refresh(file)
+            return True
+
+        return False
+

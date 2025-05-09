@@ -45,6 +45,7 @@ async def delete_file_gcp(file_name: str):
     except Exception as e:
         logger.error(f"Error al eliminar archivo: {e}")
     
+# Send notification with action result
 async def send_notification(action: str, file_name: str, client_email: str):
     try:
         message = {
@@ -68,14 +69,14 @@ async def send_notification(action: str, file_name: str, client_email: str):
     except Exception as e:
         logger.error(f"Error al enviar notificacion: {e}")
 
-async def update_metadata(client_id: str, file_name: str, client_email: str):
+# Update metadata for file in GCP
+async def update_metadata_gcp(file_path: str):
     try:
         creds_path = os.getenv("GCP_SA_KEY")        
         bucket_name = os.getenv("GCP_BUCKET_NAME")
         gcs = storage.Client.from_service_account_json(creds_path)
     
         bucket = gcs.get_bucket(bucket_name)
-        file_path = f"{client_id}/{file_name}"
         file_to_update = bucket.get_blob(file_path)
 
         if file_to_update:
@@ -83,11 +84,12 @@ async def update_metadata(client_id: str, file_name: str, client_email: str):
             metadata["firmado"] = "true"
             file_to_update.metadata = metadata
             file_to_update.patch()
-            await send_notification("fileAuthenticated", file_name, client_email)
-            logger.info(f"Archivo firmado exitosamente")
+            logger.info(f"Archivo actualizado exitosamente en bucket")
+            return True
             
         else: 
-            logger.warning(f"Archivo no encontrado: {file_name}")
+            logger.warning(f"Archivo no encontrado: {file_path}")
+            return False
 
     except Exception as e:
         logger.error(f"Error al actualizar autenticacion: {e}")
@@ -142,7 +144,8 @@ async def transfer_delete_docs(id: int, req_status: int):
             return send_notification("transfer_error", client_email)
     except Exception as e:
         logger.error(f"Error al eliminar archivos: {e}")
-        
+
+# Receive docs of new tranfered user    
 async def transfer_receive_docs(message: IncomingMessage):
     async with message.process():  # Ack automático
         try:
@@ -225,6 +228,7 @@ async def transfer_receive_docs(message: IncomingMessage):
         except Exception as e:
             logger.error(f"Error procesando transferencia de documentos: {e}")
 
+# Send confirmation of trasfered user
 async def send_confirmation(citizen_id: int, status: int, citizen_name: str, confirm_api: str): 
         try:
             async with aiohttp.ClientSession() as session:
@@ -282,36 +286,61 @@ async def delete_file(message: IncomingMessage):
         except json.JSONDecodeError:
             logger.error(f"Mensaje no es JSON válido: {message.body.decode()}")
 
-async def handle_authenticate_message(message: IncomingMessage):
+# Update metadata to authorize file
+async def update_metadata(message: IncomingMessage):
     async with message.process():  # Ack automático
         try:
             payload = json.loads(message.body.decode())
-            client_id = payload.get("client_id")
-            client_email = payload.get("client_email")
+            user_id = payload.get("user_id")
             url_document = payload.get("url_document")
             file_name = payload.get("file_name")
             logger.info(f"Mensaje recibido autenticacion")
 
             adapter_url = "http://mrpotato-adapter-service.mrpotato-adapter.svc.cluster.local/v1/adapter/autheticateDocument"
 
-            data = {
-                "idCitizen": client_id,
-                "UrlDocument": url_document,
-                "documentTitle": file_name
-            }
+            # Conexion BD 
+            from models.File import File as FileModel
+            from models.User import User
+            from sqlmodel import Session
+            from sqlmodel import select
+            
+            with Session(engine) as session:
+                logger.info("Tomar usuario desde BD")
+                statement = select(User).where(User.id == str(user_id))
+                user = session.exec(statement).first()
+                if not user:
+                    logger.error(f"Usuario no encontrado: {user_id}")
+                    return
 
-            async with aiohttp.ClientSession() as session:
-                async with session.put(adapter_url, json=data) as resp:
-                    status = resp.status
-                    resp_data = await resp.json()
+                user_document_number = user.documentNumber
+                user_email = user.email
+                file_path = f"{user_document_number}/{file_name}"
 
-                    if status == 200 or status == 201:
-                        logger.info(f"Documento autenticado exitosamente: {file_name}")
-                        await update_metadata(client_id, file_name, client_email)
-                    elif status == 204:
-                        logger.warning(f"Documento no encontrado para {file_name}")
-                    else:
-                        logger.error(f"Fallo autenticación. Status: {status}, Respuesta: {resp_data}")
+                data = {
+                    "idCitizen": user_document_number,
+                    "UrlDocument": url_document,
+                    "documentTitle": file_name
+                }
+
+                async with aiohttp.ClientSession() as session:
+                    async with session.put(adapter_url, json=data) as resp:
+                        status = resp.status
+                        resp_data = await resp.json()
+
+                        if status == 200 or status == 201:
+                            logger.info(f"Documento autenticado exitosamente: {file_name}")
+                            file_updated = await update_metadata(file_path)
+                            if file_updated:
+                                if FileModel.update_authenticated(session, file_path):
+                                    logger.info("Archivo actualizado correctamente en BD")
+                                    await send_notification("fileAuthenticated", file_name, user_email)
+                                else:
+                                    logger.error("El archivo no se pudo actualizar en BD")
+                        elif status == 204:
+                            logger.warning(f"Documento no encontrado para {file_name}")
+
+                        else:
+                            logger.error(f"Fallo autenticación. Status: {status}, Respuesta: {resp_data}")
             
         except json.JSONDecodeError:
             logger.error(f"Mensaje no es JSON válido: {message.body.decode()}")
@@ -352,7 +381,7 @@ async def main():
         # Escuchar cola de autenticacion 
         queue_auth = await channel.declare_queue(rabbitmq_queue_auth, durable=True)
         logger.info(f"Esperando mensajes en la cola: {rabbitmq_queue_auth}")
-        await queue_auth.consume(handle_authenticate_message)
+        await queue_auth.consume(update_metadata)
 
         # Escuchar cola de eliminar todos los archivos de transferencia
         queue_transfer_delete = await channel.declare_queue(rabbitmq_queue_transfer_delete_docs, durable=True)
