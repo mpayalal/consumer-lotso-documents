@@ -128,7 +128,7 @@ async def transfer_delete_docs(id: str, req_status: int):
         
         with Session(engine) as session:
             logger.info("Tomar usuario desde BD")
-            statement = select(User).where(User.id == id)
+            statement = select(User).where(User.documentNumber == str(id))
             user = session.exec(statement).first()
             if not user:
                 logger.error(f"Usuario no encontrado: {id}")
@@ -207,7 +207,7 @@ async def transfer_receive_docs(message: IncomingMessage):
                                     
                                     logger.error(f"Error al descargar archivo: {url}, status: {response.status}")
                                     await send_confirmation(int(citizen_id), 0, citizen_name, confirm_api)
-                                    continue
+                                    return
                                 
                                 # Obtener el nombre del archivo de la URL
                                 file_name = f"file_{url_key}"
@@ -249,8 +249,9 @@ async def transfer_receive_docs(message: IncomingMessage):
                                 logger.info(f"Archivo {file_name} guardado exitosamente para {citizen_name}")
                     
                     except Exception as e:
-                        await send_confirmation(int(citizen_id), 1, citizen_name, confirm_api)
+                        await send_confirmation(int(citizen_id), 0, citizen_name, confirm_api)
                         logger.error(f"Error procesando archivo desde {url}: {e}")
+                        return 
             
             # Enviar confirmación a la API proporcionada
             await send_confirmation(int(citizen_id), 1, citizen_name, confirm_api)
