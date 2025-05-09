@@ -134,6 +134,7 @@ async def transfer_delete_docs(id: str, req_status: int):
                 logger.error(f"Usuario no encontrado: {id}")
                 return 
             
+            logger.info(f"Usuario encontrado: {user.documentNumber}")
             user_email = user.email
 
             if req_status == 1:
@@ -143,14 +144,17 @@ async def transfer_delete_docs(id: str, req_status: int):
             
                 docs = []
                 prefix_folder = f"{user.documentNumber}/"
+                logger.info(prefix_folder)
                 folder = list(gcs.list_blobs(bucket_name, prefix_folder))
                 for file in folder:
                     docs.append(file.name)
                     file.delete()
+                
+                logger.info(f"Archivos: {docs}")
 
                 # Eliminar posible "objeto-carpeta"
                 bucket = gcs.get_bucket(bucket_name)
-                placeholder_blob = bucket.blob(f"{id}/")
+                placeholder_blob = bucket.blob(f"{user.documentNumber}/")
                 if placeholder_blob.exists():
                     placeholder_blob.delete()
 
