@@ -24,7 +24,9 @@ rabbitmq_queue_transfer_receive_docs = os.getenv("RABBITMQ_QUEUE_TRANSFER_RECEIV
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-async def delete_file(file_name: str, client_email: str):
+
+# Delete file from bucket in GCP
+async def delete_file_gcp(file_name: str):
     try:
         creds_path = os.getenv("GCP_SA_KEY")        
         bucket_name = os.getenv("GCP_BUCKET_NAME")
@@ -35,9 +37,10 @@ async def delete_file(file_name: str, client_email: str):
         if file_to_delete:
             file_to_delete.delete()
             logger.info(f"Archivo eliminado: {file_name}")
-            await send_notification("deletedFile", file_name, client_email)
+            return True
         else: 
             logger.warning(f"Archivo no encontrado: {file_name}")
+            return False
 
     except Exception as e:
         logger.error(f"Error al eliminar archivo: {e}")
@@ -238,15 +241,44 @@ async def send_confirmation(citizen_id: int, status: int, citizen_name: str, con
         except Exception as e:
             logger.error(f"Error al enviar confirmación: {e}")
 
-async def handle_message(message: IncomingMessage):
+# Delete file from DB
+async def delete_file(message: IncomingMessage):
     async with message.process():  # Ack automático
         try:
             payload = json.loads(message.body.decode())
+            user_id = payload.get("user_id")
             file_name = payload.get("file_name")
-            client_email = payload.get("client_email")
+
             logger.info(f"Mensaje recibido: {file_name}")
 
-            await delete_file(file_name, client_email)
+            # Nos conectamos a BD para traer la información del usuario
+            from models.File import File as FileModel
+            from models.User import User
+            from sqlmodel import Session
+            from sqlmodel import select
+            
+            with Session(engine) as session:
+                logger.info("Tomar usuario desde BD")
+                statement = select(User).where(User.id == str(user_id))
+                user = session.exec(statement).first()
+                if not user:
+                    logger.error(f"Usuario no encontrado: {user_id}")
+                    return 
+                
+                file_path = f"{user.id}/{file_name}"
+
+                # Llamar al método de eliminar archivo de GCP
+                file_deleted = await delete_file_gcp(file_path)
+                if file_deleted:
+                    # Eliminar archivo de BD
+                    if FileModel.delete_by_path(session, file_path):
+                        logger.info("Archivo eliminado exitosamente")
+                        await send_notification("deletedFile", file_name, user.email)
+                    else:
+                        logger.error(f"El archivo no se pudo eliminar de BD")
+                else:
+                    logger.error(f"El archivo no se pudo eliminar del bucket")
+
         except json.JSONDecodeError:
             logger.error(f"Mensaje no es JSON válido: {message.body.decode()}")
 
@@ -315,7 +347,7 @@ async def main():
         # Escuchar cola de eliminacion
         queue_delete = await channel.declare_queue(rabbitmq_queue_delete, durable=True)
         logger.info(f"Esperando mensajes en la cola: {rabbitmq_queue_delete}")
-        await queue_delete.consume(handle_message)
+        await queue_delete.consume(delete_file)
 
         # Escuchar cola de autenticacion 
         queue_auth = await channel.declare_queue(rabbitmq_queue_auth, durable=True)

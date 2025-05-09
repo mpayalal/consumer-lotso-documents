@@ -36,3 +36,14 @@ class File(SQLModel, table=True):
         """Get all files belonging to a specific user"""
         statement = select(cls).where(cls.user_id == user_id)
         return session.exec(statement).all()
+    
+    @classmethod
+    def delete_by_path(cls, session: Session, file_path: str) -> bool:
+        statement = select(cls).where(cls.file_path == file_path)
+        file = session.exec(statement).first()
+        
+        if file:
+            session.delete(file)
+            session.commit()
+            return True
+        return False
