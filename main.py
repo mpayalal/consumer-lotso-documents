@@ -142,7 +142,7 @@ async def transfer_delete_docs(id: str, req_status: int):
                 gcs = storage.Client.from_service_account_json(creds_path)
             
                 docs = []
-                prefix_folder = f"{id}/"
+                prefix_folder = f"{user.documentNumber}/"
                 folder = list(gcs.list_blobs(bucket_name, prefix_folder))
                 for file in folder:
                     docs.append(file.name)
