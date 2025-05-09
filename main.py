@@ -265,7 +265,7 @@ async def delete_file(message: IncomingMessage):
                     logger.error(f"Usuario no encontrado: {user_id}")
                     return 
                 
-                file_path = f"{user.id}/{file_name}"
+                file_path = f"{user.documentNumber}/{file_name}"
 
                 # Llamar al método de eliminar archivo de GCP
                 file_deleted = await delete_file_gcp(file_path)
