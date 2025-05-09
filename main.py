@@ -74,12 +74,16 @@ async def update_metadata_gcp(file_path: str):
         creds_path = os.getenv("GCP_SA_KEY")        
         bucket_name = os.getenv("GCP_BUCKET_NAME")
         gcs = storage.Client.from_service_account_json(creds_path)
-    
+
         bucket = gcs.get_bucket(bucket_name)
         file_to_update = bucket.get_blob(file_path)
 
         if file_to_update:
             metadata = file_to_update.metadata
+            if metadata is None:
+                metadata = {}
+            else:
+                metadata = file_to_update.metadata
             metadata["firmado"] = "true"
             file_to_update.metadata = metadata
             file_to_update.patch()
