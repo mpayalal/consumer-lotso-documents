@@ -329,7 +329,7 @@ async def update_metadata(message: IncomingMessage):
 
                         if status == 200 or status == 201:
                             logger.info(f"Documento autenticado exitosamente: {file_name}")
-                            file_updated = await update_metadata(file_path)
+                            file_updated = await update_metadata_gcp(file_path)
                             if file_updated:
                                 if FileModel.update_authenticated(session, file_path):
                                     logger.info("Archivo actualizado correctamente en BD")
