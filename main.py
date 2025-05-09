@@ -191,6 +191,7 @@ async def transfer_receive_docs(message: IncomingMessage):
                                 from sqlmodel import select
                                 
                                 with Session(engine) as session:
+                                    logger.info("Tomar usuario desde BD")
                                     statement = select(User).where(User.documentNumber == citizen_id)
                                     user = session.exec(statement).first()
                                     if not user:
