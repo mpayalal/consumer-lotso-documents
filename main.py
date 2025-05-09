@@ -304,10 +304,10 @@ async def update_metadata(message: IncomingMessage):
             from sqlmodel import Session
             from sqlmodel import select
             
-            with Session(engine) as session:
+            with Session(engine) as session_db:
                 logger.info("Tomar usuario desde BD")
                 statement = select(User).where(User.id == str(user_id))
-                user = session.exec(statement).first()
+                user = session_db.exec(statement).first()
                 if not user:
                     logger.error(f"Usuario no encontrado: {user_id}")
                     return
@@ -331,7 +331,7 @@ async def update_metadata(message: IncomingMessage):
                             logger.info(f"Documento autenticado exitosamente: {file_name}")
                             file_updated = await update_metadata_gcp(file_path)
                             if file_updated:
-                                if FileModel.update_authenticated(session, file_path):
+                                if FileModel.update_authenticated(session_db, file_path):
                                     logger.info("Archivo actualizado correctamente en BD")
                                     await send_notification("fileAuthenticated", file_name, user_email)
                                 else:
