@@ -118,7 +118,7 @@ async def send_delete_user(id: int, req_status: int):
         logger.error(f"Error al enviar mensaje: {e}")
 
 # Delete files of transfered user from GCP and DB
-async def transfer_delete_docs(id: int, req_status: int):
+async def transfer_delete_docs(id: str, req_status: int):
     try:
         # Nos conectamos a BD
         from models.File import File as FileModel
@@ -128,11 +128,12 @@ async def transfer_delete_docs(id: int, req_status: int):
         
         with Session(engine) as session:
             logger.info("Tomar usuario desde BD")
-            statement = select(User).where(User.id == str(id))
+            statement = select(User).where(User.id == id)
             user = session.exec(statement).first()
             if not user:
                 logger.error(f"Usuario no encontrado: {id}")
                 return 
+            
             user_email = user.email
 
             if req_status == 1:
