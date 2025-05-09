@@ -145,8 +145,8 @@ async def transfer_delete_docs(id: str, req_status: int):
                 docs = []
                 prefix_folder = f"{user.documentNumber}/"
                 logger.info(prefix_folder)
-                folder = list(gcs.list_blobs(bucket_name, prefix_folder))
-                logger.info(folder)
+                folder = gcs.list_blobs(bucket_name, prefix_folder)
+                logger.info(folder.pages)
                 for file in folder:
                     logger.info("Revisando carpeta...")
                     logger.info(f"Archivo: {file.name}")
