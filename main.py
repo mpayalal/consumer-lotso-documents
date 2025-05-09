@@ -326,6 +326,7 @@ async def main():
         logger.info(f"Esperando mensajes en la cola: {rabbitmq_queue_transfer_delete_docs}")
         await queue_transfer_delete.consume(handle_message_transfer_delete)
         
+        # Escuchar cola de recibir archivos transferidos
         queue_transfer_receive = await channel.declare_queue(rabbitmq_queue_transfer_receive_docs, durable=True)
         logger.info(f"Esperando mensajes en la cola: {rabbitmq_queue_transfer_receive_docs}")
         await queue_transfer_receive.consume(transfer_receive_docs)

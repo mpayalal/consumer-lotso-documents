@@ -50,6 +50,25 @@ spec:
             value: delete_data_transferred_documents_queue
           - name: RABBITMQ_QUEUE_TRANSFER_DELETE_USER
             value: delete_data_transferred_user_queue
+          - name: RABBITMQ_QUEUE_TRANSFER_RECEIVE_DOCS
+            value: receive_data_transferred_docs_queue
+          - name: DB_NAME
+            value: "marcianos"
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: my-db
+                key: DB_USER
+          - name: DB_PASS
+            valueFrom:
+              secretKeyRef:
+                name: my-db
+                key: DB_PASS
+          - name: DB_HOST
+            valueFrom:
+              secretKeyRef:
+                name: my-db
+                key: DB_HOST
           resources:
             limits:
               cpu: "50m"
