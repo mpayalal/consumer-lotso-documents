@@ -274,6 +274,7 @@ async def send_confirmation(citizen_id: int, status: int, citizen_name: str, con
                     "req_status": status,
                     "message": f"Documentos transferidos exitosamente para {citizen_name}"
                 }
+                logger.info(f"Enviando confirmación a {confirm_api}: {confirm_payload}")
                 async with session.post(confirm_api, json=confirm_payload) as response:
                     if response.status not in (200, 201, 204):
                         logger.error(f"Error al confirmar transferencia: {await response.text()}")
